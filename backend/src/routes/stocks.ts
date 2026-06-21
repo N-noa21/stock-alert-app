@@ -39,3 +39,46 @@ stocksRouter.post("/",async (req,res) => {
     }
 
 });
+
+stocksRouter.get("/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  const stock = await prisma.stock.findUnique({
+    where: {
+      id,
+    },
+    include: {
+      lots: {
+        orderBy: {
+          id: "asc",
+        },
+      },
+    },
+  });
+
+  if (stock === null) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  const totalQuantity = stock.lots.reduce((sum, lot) => {
+    return sum + lot.quantity;
+  }, 0);
+
+  const totalCost = stock.lots.reduce((sum, lot) => {
+    return sum + lot.quantity * lot.buyPrice;
+  }, 0);
+
+  const averageBuyPrice =
+    totalQuantity === 0 ? null : totalCost / totalQuantity;
+
+  return res.json({
+    ...stock,
+    totalQuantity,
+    totalCost,
+    averageBuyPrice,
+  });
+});
