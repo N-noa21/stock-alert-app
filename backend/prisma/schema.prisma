@@ -16,7 +16,10 @@ model Stock {
   symbol    String
   name      String?
   market    Market
+  currentPrice Decimal? @db.Decimal(18,4)
+
   lots StockLot[]
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
