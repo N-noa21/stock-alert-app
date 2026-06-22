@@ -110,10 +110,11 @@ stocksRouter.patch("/:id/price",async (req,res) => {
   }
 });
 
-stocksRouter.get("/:id/summary", async (req,res) => {
+stocksRouter.get("/:id/summary", async (req, res) => {
   const stockId = Number(req.params.id);
+
   if (!Number.isInteger(stockId)) {
-    return res.status(400).json({error:"invalid stock id"});
+    return res.status(400).json({ error: "invalid stock id" });
   }
 
   const stock = await prisma.stock.findUnique({
@@ -126,34 +127,59 @@ stocksRouter.get("/:id/summary", async (req,res) => {
           id: "asc",
         },
       },
+      alerts: {
+        orderBy: {
+          id: "asc",
+        },
+      },
     },
   });
 
   if (!stock) {
-    return res.status(404).json({error:"stock not found"});
+    return res.status(404).json({ error: "stock not found" });
   }
 
-  if (stock.currentPrice === null) {
-    return res.status(400).json({error:"current price is not set"});
-  }
-
-  const currentPrice = Number(stock.currentPrice);
-
-  const totalShares = stock.lots.reduce((sum,lot) => {
+  const totalShares = stock.lots.reduce((sum, lot) => {
     return sum + lot.quantity;
-  },0);
+  }, 0);
 
-  const totalBuyAmount = stock.lots.reduce((sum,lot) => {
-    return sum+ lot.quantity * Number(lot.buyPrice);
-  },0);
+  const totalCost = stock.lots.reduce((sum, lot) => {
+    return sum + lot.quantity * Number(lot.buyPrice);
+  }, 0);
 
-  const averageBuyPrice = totalShares === 0 ? null : totalBuyAmount / totalShares;
+  const averageBuyPrice =
+    totalShares === 0 ? null : totalCost / totalShares;
 
-  const currentValue = totalShares * currentPrice;
+  const currentPrice =
+    stock.currentPrice === null ? null : Number(stock.currentPrice);
 
-  const profitLoss = currentValue - totalBuyAmount;
+  const marketValue =
+    currentPrice === null ? null : totalShares * currentPrice;
 
-  const profitLossRate = totalBuyAmount === 0 ? null : profitLoss / totalBuyAmount;
+  const unrealizedProfit =
+    marketValue === null ? null : marketValue - totalCost;
+
+  const unrealizedProfitRate =
+    unrealizedProfit === null || totalCost === 0
+      ? null
+      : unrealizedProfit / totalCost;
+
+  const triggeredAlerts =
+    currentPrice === null
+      ? []
+      : stock.alerts.filter((alert) => {
+          if (!alert.isActive) {
+            return false;
+          }
+          const targetPrice = Number(alert.targetPrice);
+          if (alert.direction === "ABOVE") {
+            return currentPrice >= targetPrice;
+          }
+          if (alert.direction === "BELOW") {
+            return currentPrice <= targetPrice;
+          }
+          return false;
+        });
 
   return res.json({
     stock: {
@@ -161,19 +187,23 @@ stocksRouter.get("/:id/summary", async (req,res) => {
       symbol: stock.symbol,
       name: stock.name,
       market: stock.market,
-      currentPrice,
+      currentPrice: stock.currentPrice,
+      priceUpdatedAt: stock.priceUpdatedAt,
     },
-    totalShares,
-    totalBuyAmount,
-    averageBuyPrice,
-    currentValue,
-    profitLoss,
-    profitLossRate,
-    lots: stock.lots,
+    position: {
+      totalShares,
+      totalCost,
+      averageBuyPrice,
+      marketValue,
+      unrealizedProfit,
+      unrealizedProfitRate,
+    },
+    alerts: {
+      all: stock.alerts,
+      triggered: triggeredAlerts,
+    },
   });
-
-
-})
+});
 
 stocksRouter.get("/:stockId/alerts", async (req,res) => {
   const stockId = Number(req.params.stockId);
@@ -234,4 +264,42 @@ stocksRouter.post("/:stockId/alerts",async (req,res) => {
   });
 
   return res.status(201).json(alert);
+});
+
+stocksRouter.patch("/:id/price", async (req, res) => {
+  const stockId = Number(req.params.id);
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  const { currentPrice } = req.body;
+
+  if (
+    typeof currentPrice !== "number" ||
+    !Number.isFinite(currentPrice) ||
+    currentPrice <= 0
+  ) {
+    return res.status(400).json({ error: "currentPrice must be a positive number" });
+  }
+
+  try {
+    const stock = await prisma.stock.update({
+      where: {
+        id: stockId,
+      },
+      data: {
+        currentPrice,
+        priceUpdatedAt: new Date(),
+      },
+    });
+
+    return res.json(stock);
+  } catch (error: any) {
+    if (error?.code === "P2025") {
+      return res.status(404).json({ error: "stock not found" });
+    }
+
+    return res.status(500).json({ error: "failed to update stock price" });
+  }
 });

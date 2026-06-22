@@ -17,26 +17,28 @@ enum AlertDirection {
 }
 
 model Stock {
-  id        Int      @id @default(autoincrement())
-  symbol    String
-  name      String?
-  market    Market
-  currentPrice Decimal? @db.Decimal(18,4)
-  
+  id     Int     @id @default(autoincrement())
+  symbol String
+  name   String?
+  market Market
+
+  currentPrice   Decimal?  @db.Decimal(18, 4)
+  priceUpdatedAt DateTime?
+
   alerts StockAlert[]
-  lots StockLot[]
-  
+  lots   StockLot[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model StockLot {
-  id   Int @id @default(autoincrement())
-  stockId   Int
-  stock   Stock @relation(fields: [stockId],references:[id],onDelete:Cascade)
+  id      Int   @id @default(autoincrement())
+  stockId Int
+  stock   Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
-  quantity   Int
-  buyPrice   Int
+  quantity  Int
+  buyPrice  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -44,19 +46,16 @@ model StockLot {
 }
 
 model StockAlert {
-  id Int @id @default(autoincrement())
+  id      Int   @id @default(autoincrement())
   stockId Int
-  stock Stock @relation(fields:[stockId],references:[id],onDelete:Cascade)
+  stock   Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
-  direction AlertDirection
-  targetPrice Decimal @db.Decimal(18,4)
-
-  isActive Boolean @default(true)
+  direction   AlertDirection
+  targetPrice Decimal        @db.Decimal(18, 4)
+  isActive    Boolean        @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([stockId])
-  @@index([isActive])
-
 }
