@@ -174,3 +174,64 @@ stocksRouter.get("/:id/summary", async (req,res) => {
 
 
 })
+
+stocksRouter.get("/:stockId/alerts", async (req,res) => {
+  const stockId = Number(req.params.stockId);
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({error:"invalid stockId"});
+  }
+
+  const stock = await prisma.stock.findUnique({
+    where: {id:stockId},
+  });
+
+  if (!stock) {
+    return res.status(404).json({error:"status not found"});
+  }
+
+  const alerts = await prisma.stockAlert.findMany({
+    where: { stockId },
+    orderBy: {
+      id: "asc",
+    },
+  });
+  return res.json(alerts);
+});
+
+stocksRouter.post("/:stockId/alerts",async (req,res) => {
+  const stockId = Number(req.params.stockId);
+  const {direction, targetPrice} = req.body;
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({error:"invalid stockId"});
+  }
+
+  if (direction !== "ABOVE" && direction !== "BELOW") {
+    return res.status(400).json({error:"direction must be ABOVE or BELOW"});
+  }
+
+  const priceNumber = Number(targetPrice);
+
+  if (!Number.isFinite(priceNumber) || priceNumber <= 0) {
+    return res.status(400).json({error:"targetPrice must be positive number"});
+  }
+
+  const stock = await prisma.stock.findUnique({
+    where: {id:stockId},
+  });
+
+  if (!stock) {
+    return res.status(404).json({error:"stock not found"});
+  }
+
+  const alert = await prisma.stockAlert.create({
+    data: {
+      stockId,
+      direction,
+      targetPrice: priceNumber,
+    },
+  });
+
+  return res.status(201).json(alert);
+});

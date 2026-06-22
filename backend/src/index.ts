@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { stocksRouter } from "./routes/stocks";
 import { lotsRouter } from "./routes/lots";
+import { alertsRouter } from "./routes/alerts";
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.get("/health",(_req,res) => {
 });
 
 app.use("/stocks",stocksRouter);
+app.use("/alerts",alertsRouter);
 app.use(lotsRouter);
 
 const port = process.env.PORT ?? 3000;
