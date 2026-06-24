@@ -4,8 +4,14 @@ import {
   generateGeminiText,
   parseJsonFromGeminiText,
 } from "../services/geminiService";
+import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { calculateStockSummary } from "../services/stockSummaryService";
 import { analyzeStockAlerts } from "../services/alertAnalysisService";
+
+
+function getUserId(req: unknown): number {
+  return (req as AuthenticatedRequest).user.id;
+}
 
 function roundNumber(value: number | null): number | null {
   if (value === null) {
@@ -17,45 +23,52 @@ function roundNumber(value: number | null): number | null {
 
 export const stocksRouter = Router();
 
-stocksRouter.get("/",async (_req,res) => {
-    const stocks = await prisma.stock.findMany({
-        orderBy: {
-            id: "asc",
-        },
-    });
+stocksRouter.get("/", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
 
-    return res.json(stocks);
-});
-
-stocksRouter.post("/",async (req,res) => {
-    const {symbol,name,market} = req.body;
-
-    if (typeof symbol !== "string" || symbol.length === 0) {
-        return res.status(400).json({error:"symbol is required"});
-    }
-
-    if (market !== "JP" && market !== "US") {
-        return res.status(400).json({error:"market must be JP or US"});
-    }
-
-    try {
-        const stock = await prisma.stock.create({
-            data: {
-                symbol,
-                name: typeof name === "string" ? name:null,
-                market,
-            },
-        });
-
-        return res.status(201).json(stock);
-    } catch (error) {
-        return res.status(500).json({error:"failed to create stock"});
-    }
-
-});
-
-stocksRouter.get("/ai-summary", async (_req, res) => {
   const stocks = await prisma.stock.findMany({
+    where: {
+      userId,
+    },
+    orderBy: {
+      id: "asc",
+    },
+  });
+
+  return res.json(stocks);
+});
+
+stocksRouter.post("/", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const { symbol, name, market } = req.body;
+
+  if (typeof symbol !== "string" || symbol.length === 0) {
+    return res.status(400).json({ error: "symbol is required" });
+  }
+
+  if (market !== "JP" && market !== "US") {
+    return res.status(400).json({ error: "market must be JP or US" });
+  }
+
+  const stock = await prisma.stock.create({
+    data: {
+      userId,
+      symbol,
+      name: typeof name === "string" ? name : null,
+      market,
+    },
+  });
+
+  return res.status(201).json(stock);
+});
+
+stocksRouter.get("/ai-summary", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+
+  const stocks = await prisma.stock.findMany({
+    where: {
+      userId,
+    },
     orderBy: {
       id: "asc",
     },
@@ -133,8 +146,8 @@ stocksRouter.get("/ai-summary", async (_req, res) => {
       pricedItems.length === 0
         ? null
         : pricedItems.reduce((sum, stock) => {
-            return sum + (stock.marketValue ?? 0);
-          }, 0);
+          return sum + (stock.marketValue ?? 0);
+        }, 0);
 
     const totalProfitLoss =
       totalMarketValue === null ? null : totalMarketValue - totalCost;
@@ -233,6 +246,7 @@ ${JSON.stringify(aiStockSummaries)}
 });
 
 stocksRouter.get("/alerts/ai-summary", async (req, res) => {
+  const userId = getUserId(req);
   const rawThresholdRate = req.query.thresholdRate;
 
   const thresholdRate =
@@ -245,6 +259,9 @@ stocksRouter.get("/alerts/ai-summary", async (req, res) => {
   }
 
   const stocks = await prisma.stock.findMany({
+    where: {
+      userId,
+    },
     orderBy: {
       id: "asc",
     },
@@ -331,16 +348,18 @@ stocksRouter.get("/alerts/ai-summary", async (req, res) => {
   }
 });
 
-stocksRouter.get("/:id/ai-summary", async (req, res) => {
+stocksRouter.get("/:id/ai-summary", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
   const stockId = Number(req.params.id);
 
   if (!Number.isInteger(stockId)) {
     return res.status(400).json({ error: "invalid stock id" });
   }
 
-  const stock = await prisma.stock.findUnique({
+  const stock = await prisma.stock.findFirst({
     where: {
       id: stockId,
+      userId,
     },
     include: {
       lots: {
@@ -414,16 +433,18 @@ stocksRouter.get("/:id/ai-summary", async (req, res) => {
 
 
 
-stocksRouter.get("/:id/summary", async (req, res) => {
+stocksRouter.get("/:id/summary", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
   const stockId = Number(req.params.id);
 
   if (!Number.isInteger(stockId)) {
     return res.status(400).json({ error: "invalid stock id" });
   }
 
-  const stock = await prisma.stock.findUnique({
+  const stock = await prisma.stock.findFirst({
     where: {
       id: stockId,
+      userId,
     },
     include: {
       lots: {
@@ -448,7 +469,8 @@ stocksRouter.get("/:id/summary", async (req, res) => {
   return res.json(summary);
 });
 
-stocksRouter.post("/:id/alerts", async (req, res) => {
+stocksRouter.post("/:id/alerts", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
   const stockId = Number(req.params.id);
   const { direction, targetPrice } = req.body;
 
@@ -472,9 +494,10 @@ stocksRouter.post("/:id/alerts", async (req, res) => {
     });
   }
 
-  const stock = await prisma.stock.findUnique({
+  const stock = await prisma.stock.findFirst({
     where: {
       id: stockId,
+      userId,
     },
   });
 
@@ -494,6 +517,7 @@ stocksRouter.post("/:id/alerts", async (req, res) => {
 });
 
 stocksRouter.post("/:id/alerts/from-text", async (req, res) => {
+  const userId = getUserId(req);
   const stockId = Number(req.params.id);
   const { text } = req.body;
 
@@ -505,9 +529,10 @@ stocksRouter.post("/:id/alerts/from-text", async (req, res) => {
     return res.status(400).json({ error: "text is required" });
   }
 
-  const stock = await prisma.stock.findUnique({
+  const stock = await prisma.stock.findFirst({
     where: {
       id: stockId,
+      userId,
     },
   });
 
@@ -600,16 +625,161 @@ ${text}
   }
 });
 
-stocksRouter.get("/:id", async (req, res) => {
+stocksRouter.get("/:id/lots", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const stockId = Number(req.params.id);
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  const stock = await prisma.stock.findFirst({
+    where: {
+      id: stockId,
+      userId,
+    },
+  });
+
+  if (!stock) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  const lots = await prisma.stockLot.findMany({
+    where: {
+      stockId,
+    },
+    orderBy: {
+      id: "asc",
+    },
+  });
+
+  return res.json(lots);
+});
+
+stocksRouter.post("/:id/lots", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const stockId = Number(req.params.id);
+  const { quantity, buyPrice } = req.body;
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return res.status(400).json({
+      error: "quantity must be a positive integer",
+    });
+  }
+
+  const buyPriceNumber = Number(buyPrice);
+
+  if (!Number.isFinite(buyPriceNumber) || buyPriceNumber <= 0) {
+    return res.status(400).json({
+      error: "buyPrice must be a positive number",
+    });
+  }
+
+  const stock = await prisma.stock.findFirst({
+    where: {
+      id: stockId,
+      userId,
+    },
+  });
+
+  if (!stock) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  const lot = await prisma.stockLot.create({
+    data: {
+      stockId,
+      quantity,
+      buyPrice: buyPriceNumber,
+    },
+  });
+
+  return res.status(201).json(lot);
+});
+
+stocksRouter.delete("/:stockId/lots/:lotId", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const stockId = Number(req.params.stockId);
+  const lotId = Number(req.params.lotId);
+
+  if (!Number.isInteger(stockId) || !Number.isInteger(lotId)) {
+    return res.status(400).json({ error: "invalid id" });
+  }
+
+  const lot = await prisma.stockLot.findFirst({
+    where: {
+      id: lotId,
+      stockId,
+      stock: {
+        userId,
+      },
+    },
+  });
+
+  if (!lot) {
+    return res.status(404).json({ error: "lot not found" });
+  }
+
+  await prisma.stockLot.delete({
+    where: {
+      id: lotId,
+    },
+  });
+
+  return res.status(204).send();
+});
+
+
+stocksRouter.delete("/:stockId/alerts/:alertId", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const stockId = Number(req.params.stockId);
+  const alertId = Number(req.params.alertId);
+
+  if (!Number.isInteger(stockId) || !Number.isInteger(alertId)) {
+    return res.status(400).json({ error: "invalid id" });
+  }
+
+  const alert = await prisma.stockAlert.findFirst({
+    where: {
+      id: alertId,
+      stockId,
+      stock: {
+        userId,
+      },
+    },
+  });
+
+  if (!alert) {
+    return res.status(404).json({ error: "alert not found" });
+  }
+
+  await prisma.stockAlert.delete({
+    where: {
+      id: alertId,
+    },
+  });
+
+  return res.status(204).send();
+});
+
+
+
+stocksRouter.get("/:id", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
   const id = Number(req.params.id);
 
   if (Number.isNaN(id)) {
     return res.status(400).json({ error: "invalid stock id" });
   }
 
-  const stock = await prisma.stock.findUnique({
+  const stock = await prisma.stock.findFirst({
     where: {
       id,
+      userId,
     },
     include: {
       lots: {
@@ -641,30 +811,6 @@ stocksRouter.get("/:id", async (req, res) => {
     totalCost,
     averageBuyPrice,
   });
-});
-
-stocksRouter.get("/:stockId/alerts", async (req,res) => {
-  const stockId = Number(req.params.stockId);
-
-  if (!Number.isInteger(stockId)) {
-    return res.status(400).json({error:"invalid stockId"});
-  }
-
-  const stock = await prisma.stock.findUnique({
-    where: {id:stockId},
-  });
-
-  if (!stock) {
-    return res.status(404).json({error:"status not found"});
-  }
-
-  const alerts = await prisma.stockAlert.findMany({
-    where: { stockId },
-    orderBy: {
-      id: "asc",
-    },
-  });
-  return res.json(alerts);
 });
 
 

@@ -18,6 +18,10 @@ enum AlertDirection {
 
 model Stock {
   id     Int     @id @default(autoincrement())
+  
+  userId   Int
+  user   User @relation(fields:[userId],references:[id],onDelete:Cascade)
+
   symbol String
   name   String?
   market Market
@@ -30,6 +34,9 @@ model Stock {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId,symbol,market])
+  @@index([userId])
 }
 
 model StockLot {
@@ -58,4 +65,16 @@ model StockAlert {
   updatedAt DateTime @updatedAt
 
   @@index([stockId])
+}
+
+model User {
+  id   Int @id @default(autoincrement())
+  name   String
+  email   String @unique
+  passwordHash   String
+
+  stocks Stock[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

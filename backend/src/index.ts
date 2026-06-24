@@ -1,9 +1,12 @@
 import express from "express";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import dotenv from "dotenv";
 import { stocksRouter } from "./routes/stocks";
 import { lotsRouter } from "./routes/lots";
 import { alertsRouter } from "./routes/alerts";
+import { authRouter } from "./routes/auth";
+
 
 dotenv.config();
 
@@ -11,11 +14,13 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/health",(_req,res) => {
     res.json({ok:true});
 });
 
+app.use("/auth", authRouter);
 app.use("/stocks",stocksRouter);
 app.use("/alerts",alertsRouter);
 app.use(lotsRouter);
