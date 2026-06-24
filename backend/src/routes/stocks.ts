@@ -7,6 +7,11 @@ import {
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAuth";
 import { calculateStockSummary } from "../services/stockSummaryService";
 import { analyzeStockAlerts } from "../services/alertAnalysisService";
+import {
+  getCachedAiSummary,
+  saveAiSummaryCache,
+} from "../lib/aiSummaryCache";
+import { buildTradingViewUrl } from "../lib/tradingView";
 
 
 function getUserId(req: unknown): number {
@@ -89,6 +94,8 @@ stocksRouter.get("/ai-summary", requireAuth, async (req, res) => {
   if (stocks.length === 0) {
     return res.json({
       summary: "登録されている銘柄はまだありません。",
+      cached: false,
+      cacheDate: null,
       marketSummaries: [],
       stockSummaries: [],
     });
@@ -146,8 +153,8 @@ stocksRouter.get("/ai-summary", requireAuth, async (req, res) => {
       pricedItems.length === 0
         ? null
         : pricedItems.reduce((sum, stock) => {
-          return sum + (stock.marketValue ?? 0);
-        }, 0);
+            return sum + (stock.marketValue ?? 0);
+          }, 0);
 
     const totalProfitLoss =
       totalMarketValue === null ? null : totalMarketValue - totalCost;
@@ -172,6 +179,25 @@ stocksRouter.get("/ai-summary", requireAuth, async (req, res) => {
       triggeredAlertCount,
     };
   });
+
+  const forceRefresh = req.query.refresh === "true";
+
+  if (!forceRefresh) {
+    const cached = await getCachedAiSummary({
+      userId,
+      type: "PORTFOLIO_SUMMARY",
+    });
+
+    if (cached) {
+      return res.json({
+        summary: cached.content,
+        cached: true,
+        cacheDate: cached.cacheDate,
+        marketSummaries,
+        stockSummaries,
+      });
+    }
+  }
 
   const aiMarketSummaries = marketSummaries
     .filter((market) => market.stockCount > 0)
@@ -231,8 +257,16 @@ ${JSON.stringify(aiStockSummaries)}
   try {
     const summary = await generateGeminiText(prompt);
 
+    const cache = await saveAiSummaryCache({
+      userId,
+      type: "PORTFOLIO_SUMMARY",
+      content: summary,
+    });
+
     return res.json({
-      summary,
+      summary: cache.content,
+      cached: false,
+      cacheDate: cache.cacheDate,
       marketSummaries,
       stockSummaries,
     });
@@ -245,8 +279,9 @@ ${JSON.stringify(aiStockSummaries)}
   }
 });
 
-stocksRouter.get("/alerts/ai-summary", async (req, res) => {
+stocksRouter.get("/alerts/ai-summary",requireAuth, async (req, res) => {
   const userId = getUserId(req);
+
   const rawThresholdRate = req.query.thresholdRate;
 
   const thresholdRate =
@@ -279,6 +314,26 @@ stocksRouter.get("/alerts/ai-summary", async (req, res) => {
     closestAlerts,
   } = analyzeStockAlerts(stocks, thresholdRate);
 
+
+  const forceRefresh = req.query.refresh === "true";
+  
+  if (!forceRefresh) {
+    const cached = await getCachedAiSummary({
+      userId,
+      type: "ALERTS_SUMMARY",
+    });
+  
+    if (cached) {
+      return res.json({
+        summary: cached.content,
+        thresholdRate,
+        cached: true,
+        cacheDate: cached.cacheDate,
+        importantAlerts,
+        closestAlerts,
+      });
+    }
+  }
 
   const aiImportantAlerts = importantAlerts.map((alert) => ({
     symbol: alert.symbol,
@@ -333,9 +388,18 @@ stocksRouter.get("/alerts/ai-summary", async (req, res) => {
 
   try {
     const summary = await generateGeminiText(prompt);
+
+    const cache = await saveAiSummaryCache({
+      userId,
+      type: "ALERTS_SUMMARY",
+      content: summary,
+    });
+
     return res.json({
-      summary: summary,
+      summary: cache.content,
       thresholdRate,
+      cached: false,
+      cacheDate: cache.cacheDate,
       importantAlerts,
       closestAlerts,
     });
@@ -466,7 +530,16 @@ stocksRouter.get("/:id/summary", requireAuth, async (req, res) => {
 
   const summary = calculateStockSummary(stock);
 
-  return res.json(summary);
+  return res.json({
+    ...summary,
+    stock: {
+      ...summary.stock,
+      tradingViewUrl: buildTradingViewUrl({
+        symbol: stock.symbol,
+        market: stock.market,
+      }),
+    },
+  });
 });
 
 stocksRouter.post("/:id/alerts", requireAuth, async (req, res) => {
@@ -807,6 +880,10 @@ stocksRouter.get("/:id", requireAuth, async (req, res) => {
 
   return res.json({
     ...stock,
+    tradingViewUrl: buildTradingViewUrl({
+      symbol: stock.symbol,
+      market: stock.market,
+    }),
     totalQuantity,
     totalCost,
     averageBuyPrice,

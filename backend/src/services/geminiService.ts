@@ -1,17 +1,17 @@
 import { gemini } from "../lib/gemini";
 
-export async function generateGeminiText(prompt: string): Promise<string | undefined> {
+export async function generateGeminiText(prompt: string): Promise<string> {
   const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash-lite";
   const response = await gemini.models.generateContent({
     model: model,
     contents: prompt,
   });
-
-  if (response.text === undefined) {
+  const text = response.text;
+  if (!text) {
     throw new Error("Gemini response text is undefined");
   }
 
-  return response.text;
+  return text;
 }
 
 export function parseJsonFromGeminiText(text: string): unknown {

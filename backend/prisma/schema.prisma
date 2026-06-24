@@ -16,6 +16,11 @@ enum AlertDirection {
   BELOW
 }
 
+enum AiSummaryType {
+  PORTFOLIO_SUMMARY
+  ALERTS_SUMMARY
+}
+
 model Stock {
   id     Int     @id @default(autoincrement())
   
@@ -74,7 +79,26 @@ model User {
   passwordHash   String
 
   stocks Stock[]
+  AiSummaryCaches AiSummaryCache[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AiSummaryCache {
+  id        Int           @id @default(autoincrement())
+
+  userId    Int
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type      AiSummaryType
+  cacheDate String
+
+  content   String        @db.Text
+
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, type, cacheDate])
+  @@index([userId, type, cacheDate])
 }
