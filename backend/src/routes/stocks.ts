@@ -1036,3 +1036,43 @@ stocksRouter.patch("/:id/price", async (req, res) => {
     return res.status(500).json({ error: "failed to update stock price" });
   }
 });
+
+stocksRouter.delete("/:id", requireAuth, async (req, res) => {
+  const stockId = Number(req.params.id);
+  const userId = req.user!.id;
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  const stock = await prisma.stock.findFirst({
+    where: {
+      id: stockId,
+      userId,
+    },
+  });
+
+  if (!stock) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  await prisma.$transaction([
+    prisma.stockLot.deleteMany({
+      where: {
+        stockId: stock.id,
+      },
+    }),
+    prisma.stockAlert.deleteMany({
+      where: {
+        stockId: stock.id,
+      },
+    }),
+    prisma.stock.delete({
+      where: {
+        id: stock.id,
+      },
+    }),
+  ]);
+
+  return res.status(204).send();
+});

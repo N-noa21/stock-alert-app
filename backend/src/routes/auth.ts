@@ -122,3 +122,13 @@ authRouter.post("/logout", (_req, res) => {
 
   return res.json({ message: "logged out" });
 });
+
+authRouter.post("/logout", (_req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: false,
+  });
+
+  return res.json({ message: "logged out" });
+});

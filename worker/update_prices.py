@@ -2,8 +2,9 @@ import os
 from dataclasses import dataclass
 
 import requests
-import yfinance as yf
 from dotenv import load_dotenv
+
+from fetch_price import fetch_current_price
 
 
 load_dotenv()
@@ -16,8 +17,21 @@ class Stock:
     market: str
 
 
+def get_worker_headers() -> dict[str, str]:
+    worker_secret = os.getenv("WORKER_SECRET")
+
+    if worker_secret is None:
+        raise RuntimeError("WORKER_SECRET is not set")
+
+    return {
+        "x-worker-token": worker_secret,
+    }
+
+
 def to_yfinance_symbol(stock: Stock) -> str:
     if stock.market == "JP":
+        if stock.symbol.endswith(".T"):
+            return stock.symbol
         return f"{stock.symbol}.T"
 
     if stock.market == "US":
@@ -27,9 +41,13 @@ def to_yfinance_symbol(stock: Stock) -> str:
 
 
 def fetch_stocks(base_url: str) -> list[Stock]:
-    url = f"{base_url}/stocks"
+    url = f"{base_url}/internal/stocks/price-targets"
 
-    response = requests.get(url, timeout=10)
+    response = requests.get(
+        url,
+        headers=get_worker_headers(),
+        timeout=10,
+    )
 
     if response.status_code >= 400:
         raise RuntimeError(
@@ -48,22 +66,12 @@ def fetch_stocks(base_url: str) -> list[Stock]:
     ]
 
 
-def fetch_current_price(symbol: str) -> float:
-    ticker = yf.Ticker(symbol)
-    data = ticker.history(period="1d")
-
-    if data.empty:
-        raise ValueError(f"price data not found: {symbol}")
-
-    latest_close = data["Close"].iloc[-1]
-    return float(latest_close)
-
-
 def update_backend_price(base_url: str, stock_id: int, current_price: float) -> None:
-    url = f"{base_url}/stocks/{stock_id}/price"
+    url = f"{base_url}/internal/stocks/{stock_id}/price"
 
     response = requests.patch(
         url,
+        headers=get_worker_headers(),
         json={
             "currentPrice": current_price,
         },
@@ -106,6 +114,7 @@ def main() -> None:
                 f"ERROR: id={stock.id}, "
                 f"symbol={stock.symbol}, "
                 f"market={stock.market}, "
+                f"yf_symbol={yfinance_symbol}, "
                 f"error={e}"
             )
 
