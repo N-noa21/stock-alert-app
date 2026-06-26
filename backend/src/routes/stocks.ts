@@ -12,6 +12,7 @@ import {
   saveAiSummaryCache,
 } from "../lib/aiSummaryCache";
 import { buildTradingViewUrl } from "../lib/tradingView";
+import { syncTriggeredAlertsForStock } from "../services/alertService";
 
 
 function getUserId(req: unknown): number {
@@ -412,6 +413,48 @@ stocksRouter.get("/alerts/ai-summary",requireAuth, async (req, res) => {
   }
 });
 
+
+stocksRouter.get("/alerts/notification-targets", requireAuth, async (req, res) => {
+  const userId = getUserId(req);
+
+  const alerts = await prisma.stockAlert.findMany({
+    where: {
+      isActive: true,
+      triggeredAt: {
+        not: null,
+      },
+      stock: {
+        userId,
+      },
+    },
+    orderBy: {
+      triggeredAt: "desc",
+    },
+    include: {
+      stock: {
+        select: {
+          id: true,
+          symbol: true,
+          name: true,
+          market: true,
+          currentPrice: true,
+          priceUpdatedAt: true,
+        },
+      },
+    },
+  });
+
+  const notificationTargets = alerts.filter((alert) => {
+    if (alert.triggeredAt === null) return false;
+    if (alert.lastNotifiedAt === null) return true;
+
+    return alert.lastNotifiedAt < alert.triggeredAt;
+  });
+
+  return res.json(notificationTargets);
+});
+
+
 stocksRouter.get("/:id/ai-summary", requireAuth, async (req, res) => {
   const userId = getUserId(req);
   const stockId = Number(req.params.id);
@@ -528,18 +571,45 @@ stocksRouter.get("/:id/summary", requireAuth, async (req, res) => {
     return res.status(404).json({ error: "stock not found" });
   }
 
-  const summary = calculateStockSummary(stock);
+  await syncTriggeredAlertsForStock(stock.id);
+
+  const refreshedStock = await prisma.stock.findFirst({
+    where: {
+      id: stockId,
+      userId,
+    },
+    include: {
+      lots: {
+        orderBy: {
+          id: "asc",
+        },
+      },
+      alerts: {
+        orderBy: {
+          id: "asc",
+        },
+      },
+    },
+  });
+
+  if (!refreshedStock) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  const summary = calculateStockSummary(refreshedStock);
 
   return res.json({
     ...summary,
     stock: {
       ...summary.stock,
       tradingViewUrl: buildTradingViewUrl({
-        symbol: stock.symbol,
-        market: stock.market,
+        symbol: refreshedStock.symbol,
+        market: refreshedStock.market,
       }),
     },
   });
+
+
 });
 
 stocksRouter.post("/:id/alerts", requireAuth, async (req, res) => {
@@ -839,7 +909,44 @@ stocksRouter.delete("/:stockId/alerts/:alertId", requireAuth, async (req, res) =
   return res.status(204).send();
 });
 
+stocksRouter.post(
+  "/:stockId/alerts/:alertId/mark-notified",
+  requireAuth,
+  async (req, res) => {
+    const userId = getUserId(req);
+    const stockId = Number(req.params.stockId);
+    const alertId = Number(req.params.alertId);
 
+    if (!Number.isInteger(stockId) || !Number.isInteger(alertId)) {
+      return res.status(400).json({ error: "invalid id" });
+    }
+
+    const alert = await prisma.stockAlert.findFirst({
+      where: {
+        id: alertId,
+        stockId,
+        stock: {
+          userId,
+        },
+      },
+    });
+
+    if (!alert) {
+      return res.status(404).json({ error: "alert not found" });
+    }
+
+    const updatedAlert = await prisma.stockAlert.update({
+      where: {
+        id: alert.id,
+      },
+      data: {
+        lastNotifiedAt: new Date(),
+      },
+    });
+
+    return res.json(updatedAlert);
+  }
+);
 
 stocksRouter.get("/:id", requireAuth, async (req, res) => {
   const userId = getUserId(req);
@@ -918,7 +1025,8 @@ stocksRouter.patch("/:id/price", async (req, res) => {
         priceUpdatedAt: new Date(),
       },
     });
-
+    await syncTriggeredAlertsForStock(stock.id);
+    
     return res.json(stock);
   } catch (error: any) {
     if (error?.code === "P2025") {
@@ -927,4 +1035,44 @@ stocksRouter.patch("/:id/price", async (req, res) => {
 
     return res.status(500).json({ error: "failed to update stock price" });
   }
+});
+
+stocksRouter.delete("/:id", requireAuth, async (req, res) => {
+  const stockId = Number(req.params.id);
+  const userId = req.user!.id;
+
+  if (!Number.isInteger(stockId)) {
+    return res.status(400).json({ error: "invalid stock id" });
+  }
+
+  const stock = await prisma.stock.findFirst({
+    where: {
+      id: stockId,
+      userId,
+    },
+  });
+
+  if (!stock) {
+    return res.status(404).json({ error: "stock not found" });
+  }
+
+  await prisma.$transaction([
+    prisma.stockLot.deleteMany({
+      where: {
+        stockId: stock.id,
+      },
+    }),
+    prisma.stockAlert.deleteMany({
+      where: {
+        stockId: stock.id,
+      },
+    }),
+    prisma.stock.delete({
+      where: {
+        id: stock.id,
+      },
+    }),
+  ]);
+
+  return res.status(204).send();
 });

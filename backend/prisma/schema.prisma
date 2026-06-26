@@ -66,6 +66,9 @@ model StockAlert {
   targetPrice Decimal        @db.Decimal(18, 4)
   isActive    Boolean        @default(true)
 
+  triggeredAt    DateTime?
+  lastNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -6,13 +6,18 @@ import { stocksRouter } from "./routes/stocks";
 import { lotsRouter } from "./routes/lots";
 import { alertsRouter } from "./routes/alerts";
 import { authRouter } from "./routes/auth";
-
+import { internalRouter } from "./routes/internal";
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:3001",
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -22,6 +27,7 @@ app.get("/health",(_req,res) => {
 
 app.use("/auth", authRouter);
 app.use("/stocks",stocksRouter);
+app.use("/internal", internalRouter);
 app.use("/alerts",alertsRouter);
 app.use(lotsRouter);
 
