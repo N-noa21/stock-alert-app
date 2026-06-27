@@ -6,6 +6,16 @@ import { requireAuth, type AuthenticatedRequest } from "../middlewares/requireAu
 
 export const authRouter = Router();
 
+const isProduction = process.env.NODE_ENV === "production";
+
+const authCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  path: "/",
+  maxAge: 1000 * 60 * 60 * 24 * 7,
+} as const;
+
 authRouter.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -76,12 +86,7 @@ authRouter.post("/login", async (req, res) => {
 
   const token = signToken({ userId: user.id });
 
-  res.cookie("accessToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 1000 * 60 * 60 * 24 * 7,
-  });
+  res.cookie("token", token, authCookieOptions);
 
   return res.json({
     id: user.id,
@@ -114,20 +119,11 @@ authRouter.get("/me", requireAuth, async (req, res) => {
 });
 
 authRouter.post("/logout", (_req, res) => {
-  res.clearCookie("accessToken", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  });
-
-  return res.json({ message: "logged out" });
-});
-
-authRouter.post("/logout", (_req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
-    sameSite: "lax",
-    secure: false,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
   });
 
   return res.json({ message: "logged out" });
