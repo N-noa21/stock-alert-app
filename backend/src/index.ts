@@ -43,8 +43,8 @@ app.use("/internal", internalRouter);
 app.use("/alerts",alertsRouter);
 app.use(lotsRouter);
 
-const port = process.env.PORT ?? 3000;
+const port = Number(process.env.PORT ?? 3000);
 
-app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+app.listen(port, "0.0.0.0", () => {
+  console.log(`server listening on port ${port}`);
 });
