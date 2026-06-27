@@ -14,10 +14,6 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-app.get("/health", (_req, res) => {
-  return res.json({ status: "ok" });
-});
-
 const frontendUrl = process.env.FRONTEND_URL;
 
 if (!frontendUrl) {
