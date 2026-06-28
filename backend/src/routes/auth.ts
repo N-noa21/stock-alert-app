@@ -58,9 +58,9 @@ authRouter.post("/register", async (req, res) => {
 
 
   const token = signToken({ userId: user.id });
-
+  
   res.cookie("token", token, authCookieOptions);
-
+  
   return res.status(201).json({
     user,
     token,
