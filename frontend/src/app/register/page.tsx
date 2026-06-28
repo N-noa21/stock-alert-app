@@ -11,6 +11,7 @@ type RegisterResponse = {
     email: string;
     name: string | null;
   };
+  token: string;
 };
 
 export default function RegisterPage() {
@@ -29,16 +30,14 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
-      await apiFetch<RegisterResponse>("/auth/register", {
+      const data = await apiFetch<RegisterResponse>("/auth/register", {
         method: "POST",
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-        }),
+        body: JSON.stringify({ name, email, password }),
       });
-
-      router.push("/login");
+      
+      localStorage.setItem("token", data.token);
+      
+      router.push("/stocks");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました");
     } finally {

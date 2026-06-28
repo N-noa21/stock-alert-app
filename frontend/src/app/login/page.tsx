@@ -11,6 +11,7 @@ type LoginResponse = {
     email: string;
     name: string | null;
   };
+  token: string;
 };
 
 export default function LoginPage() {
@@ -28,13 +29,17 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      await apiFetch<LoginResponse>("/auth/login", {
+      const data = await apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
         body: JSON.stringify({
           email,
           password,
         }),
       });
+      
+      localStorage.setItem("token", data.token);
+      
+      router.push("/stocks");
 
       router.push("/stocks");
     } catch (err) {

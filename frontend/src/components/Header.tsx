@@ -12,9 +12,10 @@ export function Header() {
       await apiFetch<{ message: string }>("/auth/logout", {
         method: "POST",
       });
-
-      router.push("/login");
     } catch {
+      // backend logout に失敗しても、frontend 側ではログアウト扱いにする
+    } finally {
+      localStorage.removeItem("token");
       router.push("/login");
     }
   }

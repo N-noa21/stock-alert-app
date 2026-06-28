@@ -58,10 +58,14 @@ authRouter.post("/register", async (req, res) => {
 
 
   const token = signToken({ userId: user.id });
-  
+
   res.cookie("token", token, authCookieOptions);
 
-  return res.status(201).json(user);
+  return res.status(201).json({
+    user,
+    token,
+  });
+
 });
 
 authRouter.post("/login", async (req, res) => {
@@ -90,13 +94,16 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const token = signToken({ userId: user.id });
-
+  
   res.cookie("token", token, authCookieOptions);
-
+  
   return res.json({
-    id: user.id,
-    name: user.name,
-    email: user.email,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+    },
+    token,
   });
 });
 
