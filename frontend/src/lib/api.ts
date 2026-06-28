@@ -1,4 +1,10 @@
-const API_BASE_PATH = "/api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+if (!API_BASE_URL) {
+  throw new Error("NEXT_PUBLIC_API_BASE_URL is not set");
+}
+
+const normalizedApiBaseUrl = API_BASE_URL.replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -17,9 +23,8 @@ export async function apiFetch<T>(
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const res = await fetch(`${API_BASE_PATH}${path}`, {
+  const res = await fetch(`${normalizedApiBaseUrl}${path}`, {
     ...options,
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
