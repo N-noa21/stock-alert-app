@@ -75,6 +75,32 @@ function normalizeNotificationTargets(
   return data.targets ?? data.notificationTargets ?? data.alerts ?? [];
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "-";
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatPrice(value: string | null, market: "JP" | "US") {
+  if (!value) return "-";
+
+  const price = Number(value);
+
+  if (Number.isNaN(price)) return "-";
+
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: market === "JP" ? "JPY" : "USD",
+    maximumFractionDigits: market === "JP" ? 0 : 2,
+  }).format(price);
+}
+
 export default function StocksPage() {
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [symbol, setSymbol] = useState("");
@@ -458,40 +484,97 @@ export default function StocksPage() {
       </form>
 
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
-
+            
       {isLoading ? (
         <p>読み込み中...</p>
-      ) : stocks.length === 0 ? (
-        <p>まだ銘柄がありません。</p>
       ) : (
-        <div className="space-y-3">
-        {stocks.map((stock) => (
-          <Link
-            key={stock.id}
-            href={`/stocks/${stock.id}`}
-            className="block rounded border p-4 hover:bg-gray-50"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-lg font-bold">
-                  {stock.symbol}{" "}
-                  <span className="text-sm font-normal text-gray-500">
-                    {stock.market}
-                  </span>
-                </p>
-                <p className="text-sm text-gray-600">
-                  {stock.name ?? "名称未設定"}
-                </p>
-              </div>
-        
-              <div className="text-right">
-                <p className="text-sm text-gray-500">現在価格</p>
-                <p className="font-bold">{stock.currentPrice ?? "未取得"}</p>
-              </div>
+        <section className="overflow-hidden rounded-xl border bg-white">
+          <div className="border-b px-5 py-4">
+            <h2 className="text-lg font-bold">登録銘柄</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              登録した銘柄の価格・更新状況を一覧で確認できます。
+            </p>
+          </div>
+      
+          {stocks.length === 0 ? (
+            <div className="px-5 py-10 text-center text-sm text-gray-500">
+              まだ銘柄が登録されていません。
             </div>
-          </Link>
-        ))}
-        </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-gray-600">
+                      銘柄
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-gray-600">
+                      市場
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-gray-600">
+                      現在価格
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-gray-600">
+                      更新日時
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-left font-semibold text-gray-600">
+                      状態
+                    </th>
+                    <th className="whitespace-nowrap px-4 py-3 text-right font-semibold text-gray-600">
+                      操作
+                    </th>
+                  </tr>
+                </thead>
+          
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {stocks.map((stock) => (
+                    <tr key={stock.id} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="font-semibold text-gray-900">
+                          {stock.symbol}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {stock.name ?? "名称未設定"}
+                        </div>
+                      </td>
+                  
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                          {stock.market}
+                        </span>
+                      </td>
+                  
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                        {formatPrice(stock.currentPrice, stock.market)}
+                      </td>
+                  
+                      <td className="whitespace-nowrap px-4 py-3 text-gray-600">
+                        {formatDateTime(stock.priceUpdatedAt)}
+                      </td>
+                  
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {stock.currentPrice ? (
+                          <span className="text-xs text-green-700">価格取得済み</span>
+                        ) : (
+                          <span className="text-xs text-gray-500">価格未取得</span>
+                        )}
+                      </td>
+                      
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
+                        <Link
+                          href={`/stocks/${stock.id}`}
+                          className="rounded bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
+                        >
+                          詳細
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
     </main>
     </>
