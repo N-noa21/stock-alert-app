@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 if (!API_BASE_URL) {
@@ -19,10 +22,17 @@ async function proxy(req: NextRequest, context: Context) {
 
   const targetUrl = `${normalizedApiBaseUrl}/${path.join("/")}${req.nextUrl.search}`;
 
-  const headers = new Headers(req.headers);
+  const headers = new Headers();
 
-  // backend側には Render の host として渡す
-  headers.set("host", new URL(normalizedApiBaseUrl).host);
+  const contentType = req.headers.get("content-type");
+  if (contentType) {
+    headers.set("content-type", contentType);
+  }
+
+  const cookie = req.headers.get("cookie");
+  if (cookie) {
+    headers.set("cookie", cookie);
+  }
 
   const body =
     req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
@@ -31,12 +41,26 @@ async function proxy(req: NextRequest, context: Context) {
     method: req.method,
     headers,
     body,
-    redirect: "manual",
+    cache: "no-store",
   });
 
-  return new NextResponse(backendRes.body, {
+  const responseText = await backendRes.text();
+
+  const responseHeaders = new Headers();
+
+  const responseContentType = backendRes.headers.get("content-type");
+  if (responseContentType) {
+    responseHeaders.set("content-type", responseContentType);
+  }
+
+  const setCookie = backendRes.headers.get("set-cookie");
+  if (setCookie) {
+    responseHeaders.set("set-cookie", setCookie);
+  }
+
+  return new NextResponse(responseText, {
     status: backendRes.status,
-    headers: backendRes.headers,
+    headers: responseHeaders,
   });
 }
 
