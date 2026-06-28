@@ -9,3 +9,4 @@ backend/.env
 backend/dist
 
 backend/prisma/dev.db
+.vercel
