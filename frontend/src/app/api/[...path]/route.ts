@@ -17,6 +17,14 @@ type Context = {
   }>;
 };
 
+function extractTokenFromSetCookie(setCookie: string): string | null {
+  const match = setCookie.match(/token=([^;]*)/);
+  if (!match) return null;
+
+  const token = match[1];
+  return token.length > 0 ? token : null;
+}
+
 async function proxy(req: NextRequest, context: Context) {
   const { path } = await context.params;
 
@@ -29,9 +37,10 @@ async function proxy(req: NextRequest, context: Context) {
     headers.set("content-type", contentType);
   }
 
-  const cookie = req.headers.get("cookie");
-  if (cookie) {
-    headers.set("cookie", cookie);
+  // frontend 側に保存されている token cookie を backend に渡す
+  const tokenCookie = req.cookies.get("token")?.value;
+  if (tokenCookie) {
+    headers.set("cookie", `token=${tokenCookie}`);
   }
 
   const body =
@@ -53,15 +62,30 @@ async function proxy(req: NextRequest, context: Context) {
     responseHeaders.set("content-type", responseContentType);
   }
 
-  const setCookie = backendRes.headers.get("set-cookie");
-  if (setCookie) {
-    responseHeaders.set("set-cookie", setCookie);
-  }
-
-  return new NextResponse(responseText, {
+  const response = new NextResponse(responseText, {
     status: backendRes.status,
     headers: responseHeaders,
   });
+
+  const backendSetCookie = backendRes.headers.get("set-cookie");
+
+  if (backendSetCookie) {
+    const token = extractTokenFromSetCookie(backendSetCookie);
+
+    if (token) {
+      response.cookies.set("token", token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+    } else {
+      response.cookies.delete("token");
+    }
+  }
+
+  return response;
 }
 
 export const GET = proxy;
